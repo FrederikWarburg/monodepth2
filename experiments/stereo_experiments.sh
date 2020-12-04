@@ -25,3 +25,10 @@ python ../train.py --model_name S_640x192_no_pt \
 python ../train.py --model_name S_640x192_baseline \
   --use_stereo --frame_ids 0 --split eigen_full \
   --v1_multiscale --disable_automasking
+
+
+# Tartanair locally
+python train.py --model_name S_416x128 \
+  --data_path ../../data/TartanAirIndoorEurocFormatReduced/ \
+  --use_stereo --frame_ids 0 --split tartanair \
+  --height 240 --width 320 --num_workers 2
