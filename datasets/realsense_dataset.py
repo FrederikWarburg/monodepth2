@@ -12,7 +12,7 @@ import numpy as np
 import PIL.Image as pil
 import pandas as pd
 import cv2
-
+import scipy
 #from kitti_utils import generate_depth_map
 # Copyright Niantic 2019. Patent Pending. All rights reserved.
 #
@@ -46,7 +46,7 @@ def get_intrinsic_extrinsic(data):
     T = np.asarray(data['T_SC']).reshape(4,4).astype(dtype=np.float32)
     
     dis_coeff = data['distortion_coefficients']
-    F = data['focal_length'] 
+    F = data['focal_length']
     pp = data['principal_point']
     dim = data['image_dimension']
 
@@ -309,7 +309,6 @@ class RealSenseDepth(data.Dataset):
         for sensor in ['cam0', 'depth0', 'ir0', 'ir1']:
             data[sensor] = data[sensor][:min(_lengths)]
             data[sensor][:,1] = [os.path.join(datapath, sensor, 'data', fn) for fn in data[sensor][:,1]]
-
         #only with laser
         if False:
             pass
@@ -358,6 +357,11 @@ class RealSenseDepth(data.Dataset):
         dep = dep.astype(np.float32) / (1000.0) 
 
         #TODO: what unit is this?
+
+        #import matplotlib.pyplot as plt
+        #plt.imshow(dep)
+        #plt.show()
+
 
         return dep
 
@@ -408,16 +412,19 @@ class RealSenseDepth(data.Dataset):
         aligned_depth = np.zeros((self.height, self.width))
         aligned_depth[y_[mask], x_[mask]] = z[mask]
 
+        #aligned_depth = scipy.signal.medfilt2d(aligned_depth, (3,3)) 
+        #aligned_depth = cv2.dilate(aligned_depth,(5,5),iterations = 1)
+
         return aligned_depth
 
     def align_depth_to_rgb(self, dep):
 
         """
         import matplotlib.pyplot as plt
-        plt.subplot(1,2,1)
+        plt.subplot(1,3,1)
         plt.imshow(dep)
         plt.title("depth")
-        plt.subplot(1,2,2)
+        plt.subplot(1,3,2)
         """
 
         # backproject depth from depth
@@ -433,8 +440,18 @@ class RealSenseDepth(data.Dataset):
         """
         plt.imshow(aligned_depth)
         plt.title("aligned_depth")
+        plt.subplot(1,3,3)
+        """
+
+        kernel = np.ones((3,3),np.uint8)
+        aligned_depth = cv2.dilate(aligned_depth,kernel,iterations = 1)
+
+        """
+        plt.imshow(aligned_depth)
+        plt.title("dilated")
         plt.show()
         """
+        
         return aligned_depth
 
     def dep_to_disp(self, dep):
@@ -454,5 +471,12 @@ class RealSenseDepth(data.Dataset):
         dep = self.align_depth_to_rgb(dep)
 
         disp = self.dep_to_disp(dep)
+        
+        """
+        import matplotlib.pyplot as plt
+        plt.imshow(disp)
+        plt.title("aligned_disp")
+        plt.show()
+        """
 
         return disp

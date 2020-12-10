@@ -54,5 +54,5 @@ python train.py --model_name S_416x128 \
 python train.py --model_name S_416x128 \
   --data_path /media/slamcore/frederik/d345i \
   --use_stereo --frame_ids 0 --split tartanair --dataset realsense_depth \
-  --height 480 --width 832 --num_workers 2 --batch_size  1 --log_dir pretrained \
+  --height 480 --width 832 --num_workers 2 --batch_size  4 --log_dir pretrained \
   --calib calibration/ucf_d435i_rgb_sem.yaml
