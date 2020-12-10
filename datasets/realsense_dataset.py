@@ -457,7 +457,7 @@ class RealSenseDepth(data.Dataset):
 
     def dep_to_disp(self, dep):
 
-        mask = (dep > self.min_depth) * (dep < self.max_depth)
+        mask = (dep < self.min_depth) * (dep > self.max_depth)
         #dep = np.clip(dep, self.min_depth, self.max_depth)
         scaled_disp = (1 - dep*self.min_depth)/ (dep*self.max_depth)
         scaled_disp[mask] = 0
