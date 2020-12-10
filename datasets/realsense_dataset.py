@@ -86,6 +86,8 @@ class RealSenseDepth(data.Dataset):
                  frame_idxs,
                  num_scales,
                  calibration_file,
+                 min_depth, 
+                 max_depth,
                  is_train=False,
                  img_ext='.jpg'):
         super(RealSenseDepth, self).__init__()
@@ -97,8 +99,8 @@ class RealSenseDepth(data.Dataset):
         self.num_scales = num_scales
         self.interp = Image.ANTIALIAS
 
-        self.min_depth = 0.1
-        self.max_depth = 10.0
+        self.min_depth = min_depth
+        self.max_depth = max_depth
 
         self.frame_idxs = frame_idxs
 
