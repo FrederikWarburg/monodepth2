@@ -38,4 +38,21 @@ python train.py --model_name S_416x128 \
 python train.py --model_name S_416x128 \
   --data_path /media/slamcore/frederik/TartanAirIndoorEurocFormat/ \
   --use_stereo --frame_ids 0 --split tartanair --dataset tartanair_depth \
-  --height 480 --width 640 --num_workers 8
+  --height 480 --width 640 --num_workers 2
+
+
+# Realsense locally
+python train.py --model_name S_416x128 \
+  --data_path ../../data/d455/ \
+  --use_stereo --frame_ids 0 --split tartanair --dataset realsense_depth \
+  --height 480 --width 832 --num_workers 2 --batch_size  1 --log_dir pretrained \
+  --calib calibration/032522250355.yaml
+
+
+
+# Realsense cluster
+python train.py --model_name S_416x128 \
+  --data_path /media/slamcore/frederik/d345i \
+  --use_stereo --frame_ids 0 --split tartanair --dataset realsense_depth \
+  --height 480 --width 832 --num_workers 2 --batch_size  1 --log_dir pretrained \
+  --calib calibration/ucf_d435i_rgb_sem.yaml

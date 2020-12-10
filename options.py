@@ -21,6 +21,11 @@ class MonodepthOptions:
                                  type=str,
                                  help="path to the training data",
                                  default=os.path.join(file_dir, "kitti_data"))
+        self.parser.add_argument("--calib",
+                                 type=str,
+                                 help="path to the calib data",
+                                 choices=['calibration/032522250355.yaml', 'calibration/ucf_d435i_rgb_sem.yaml'],
+                                 default='calibration/ucf_d435i_rgb_sem.yaml')
         self.parser.add_argument("--log_dir",
                                  type=str,
                                  help="log directory",
@@ -155,7 +160,7 @@ class MonodepthOptions:
                                  nargs="+",
                                  type=str,
                                  help="models to load",
-                                 default=["encoder", "depth", "pose_encoder", "pose"])
+                                 default=["encoder", "depth"])
 
         # LOGGING options
         self.parser.add_argument("--log_frequency",

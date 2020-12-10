@@ -1,0 +1,106 @@
+---
+cameras:
+  - {SensorID: ["Infrared", 0],
+     T_SC: [ 9.9999937646332882e-01, 1.1063553334850586e-03, 1.5182499685173964e-04,-3.7122533333333332e-03,
+            -1.1069282598463496e-03, 9.9999206483792813e-01, 3.8268748352175723e-03, 3.8980683333333338e-03,
+            -1.4758990871126035e-04,-3.8270405084003425e-03, 9.9999266596218894e-01, 1.7582904999999999e-02,
+            0.,                      0.,                     0.,                     1.                    ],
+     image_dimension: [848, 480],
+     distortion_coefficients: [ 0.0, 0.0, 0.0, 0.0 ] ,
+     distortion_type: "none",
+     focal_length: [ 4.2711225733701440e+02, 4.2720197736420749e+02 ],
+     principal_point: [ 4.2488291584109146e+02, 2.3996792510521490e+02 ] }
+
+  - {SensorID: ["Infrared", 1],
+     T_SC: [ 9.9999865099690477e-01, 1.1081123828671330e-03,-1.2124732234165840e-03, 4.6369534999999996e-02,
+            -1.1033816995568715e-03, 9.9999180410083810e-01, 3.8954178179130077e-03, 3.8177133333333335e-03,
+             1.2167798468287791e-03,-3.8940747422163938e-03, 9.9999167777972353e-01, 1.7697606666666667e-02,
+             0.,                     0.,                     0.,                     1.                    ],
+     image_dimension: [848, 480],
+     distortion_coefficients: [ 0.0, 0.0, 0.0, 0.0 ],
+     distortion_type: "none",
+     focal_length: [ 4.2705616800672391e+02, 4.2716442140753276e+02 ],
+     principal_point: [ 4.2433794784439812e+02, 2.4006183656157452e+02 ] }
+
+  - {SensorID: ["Depth", 0],
+     T_SC: [ 9.9999937646332882e-01, 1.1063553334850586e-03, 1.5182499685173964e-04,-3.7122533333333332e-03,
+            -1.1069282598463496e-03, 9.9999206483792813e-01, 3.8268748352175723e-03, 3.8980683333333338e-03,
+            -1.4758990871126035e-04,-3.8270405084003425e-03, 9.9999266596218894e-01, 1.7582904999999999e-02,
+            0.,                      0.,                     0.,                     1.                    ],
+     image_dimension: [848, 480],
+     distortion_coefficients: [ 0.0, 0.0, 0.0, 0.0 ],
+     distortion_type: "none",
+     focal_length: [ 4.2711225733701440e+02, 4.2720197736420749e+02 ],
+     principal_point: [ 4.2488291584109146e+02, 2.3996792510521490e+02 ] }
+
+  - {SensorID: ["Visible", 0],
+     T_SC: [ 0.99989    , 0.01442 ,-0.00462,-0.01860 , 
+            -0.01437 , 0.99986  , 0.00911, 0.00391, 
+             0.00475,-0.00904, 0.99995  , 0.01744 , 
+             0.0       , 0.0       , 0.0       , 1.0],
+     image_dimension: [848, 480],
+     distortion_coefficients: [ 0.0, 0.0, 0.0, 0.0 ],
+     distortion_type: "none",
+     focal_length: [ 613.133, 613.191 ],
+     principal_point: [ 423.826, 239.72 ] }
+
+camera_params:
+  camera_serial_number: "000000000000" # Universal Config File, no S/N available
+  timeshift_cam_imu: 0.0045311279 # Time difference between camera and IMU [s]
+
+imu_params:
+  a_max: 39.2266 # Acceleration saturation [m/s^2]
+  g_max: 8.7 # Gyro saturation [rad/s]
+  sigma_g_c: 0.002 # Gyro noise density [rad/s/sqrt(Hz)]
+  sigma_a_c: 0.06 # Accelerometer noise density [m/s^2/sqrt(Hz)]
+  sigma_bg: [0.03, 0.03, 0.03] # Gyro bias standard deviation prior [rad/s]
+  sigma_ba: [0.1, 0.1, 0.1]    # Accelerometer bias standard deviation prior [m/s^2]
+  sigma_gw_c: 0.0002 # Gyro drift noise density [rad/s^s/sqrt(Hz)]
+  sigma_aw_c: 0.012 # Accelerometer drift noise density [m/s^2/sqrt(Hz)]
+  g: 9.81007 # Earth's acceleration due to gravity [m/s^2]
+  g0: [ -2.1987028885632753e-03, -8.1553822383284569e-04, -1.1944596190005541e-03 ]
+  a0: [ -1.7457953095436096e-01, -1.7255140841007233e-01,  3.6301606893539429e-01 ]
+  T_BS: # Transform Body-Sensor (IMU)
+    [ 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1. ]
+
+estimator_params:
+  num_keyframes: 5 # Number of keyframes in optimisation window
+  num_imu_frames: 3 # Number of frames linked by most recent nonlinear IMU error terms
+  max_iterations: 7  # Maximum number of iterations in one optimisation run
+  max_optimisation_time: 18 # Maximum allowed time of optimisation [ms]
+
+frontend_params:
+  keyframe_creation_strategy: "hybrid" # Type of keyframe creation strategy (okvis or hybrid)
+  extractor_type: "akaze_mldb" # Feature extractor type (harris_brisk or akaze_brisk or akaze_mldb)
+  num_keypoints: 100 # Expected number of keypoints to be detected
+  min_matches_tracking: 8
+  radius_anms: 17
+  keyframe_hybrid_params:
+    min_num_frames_after_gyro_saturation: 200S
+    min_num_frames_after_accelerometer_saturation: 200
+
+misc_params:
+  backend_type: "visual_inertial" # Type of information we are processing (visual [visual only] or visual_inertial [visual + IMU])
+  positioning_mode: "slam" # Type of positioning method (odometry, odometry_relocalisation_local, odometry_relocalisation_global or slam)
+  low_latency_mode: false
+
+cam_reader_params:
+  auto_exposure: true # also implies auto gain
+  exposure_value: 4000.0 # Value [us] range: [1, 165000]. Ignored if auto_exposure is true
+  gain_value: 32.0 # Value range: [16, 248]. Ignored if auto_exposure is true
+  frame_rate: 60 # Available values: (6, 15, 30, 60, 90) [fps]
+  projector_state: true # Whether IR projector is on or off
+  projector_interleaved: true
+
+imu_reader_params:
+  accel_rate: 250 # Available values: (63, 250) [Hz]
+  gyro_rate: 200 # Available values: (200, 400) [Hz]
+
+segmentation_params:
+  type: "semantic" # Type of DNN network (semantic or panoptic)
+  labels: "indoor12" # Set of labels (indoor12 or outdoor19)
+  sensors: [["Visible", 0]]
+  network_path: "resnet50_coco_dcn_indoor12_1024" # Path to the DNN weights
+  deformable_convolution_head: true
+  image_size: [ 1024, 1024 ]
+
