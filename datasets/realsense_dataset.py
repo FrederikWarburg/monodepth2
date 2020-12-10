@@ -357,8 +357,7 @@ class RealSenseDepth(data.Dataset):
         dep = transforms.functional.crop(dep, 0, 0, self.height, self.width)
         dep = np.array(dep)
         dep = dep.astype(np.float32) / (1000.0) 
-
-        #TODO: what unit is this?
+        # dep stored in milimeters so dividing with 1000 gives meters
 
         #import matplotlib.pyplot as plt
         #plt.imshow(dep)
@@ -458,8 +457,8 @@ class RealSenseDepth(data.Dataset):
 
     def dep_to_disp(self, dep):
 
-        mask = dep == 0
-        dep = np.clip(dep, self.min_depth, self.max_depth)
+        mask = (dep > self.min_depth) * (dep < self.max_depth)
+        #dep = np.clip(dep, self.min_depth, self.max_depth)
         scaled_disp = (1 - dep*self.min_depth)/ (dep*self.max_depth)
         scaled_disp[mask] = 0
         scaled_disp_im = Image.fromarray(scaled_disp)
