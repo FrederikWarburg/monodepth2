@@ -321,7 +321,7 @@ class Trainer:
         else:
             ssim_loss = self.ssim(pred, target).mean(1, True)
             reprojection_loss = 0.85 * ssim_loss + 0.15 * l1_loss
-
+        
         return reprojection_loss
 
     def compute_losses(self, inputs, outputs):
@@ -344,11 +344,15 @@ class Trainer:
 
             target = inputs[("ir0", 0, source_scale)]
             pred = outputs[("ir1", 0, scale)]
-            reprojection_losses.append(self.compute_reprojection_loss(pred, target))
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_ir0_ir1",0,scale)] = reprojection_loss.clone()
 
             target = inputs[("ir1", 0, source_scale)]
             pred = outputs[("ir0", 0, scale)]
-            reprojection_losses.append(self.compute_reprojection_loss(pred, target))
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_ir1_ir0",0,scale)] = reprojection_loss.clone()
 
             reprojection_losses = torch.cat(reprojection_losses, 1)
 
@@ -410,19 +414,27 @@ class Trainer:
             #    outputs["identity_selection/{}".format(scale)] = (
             #        idxs > identity_reprojection_loss.shape[1] - 1).float()
 
-            loss += to_optimise.mean()
+            reproject_loss = to_optimise.mean()
 
             # smoothness loss
             mean_disp = disp.mean(2, True).mean(3, True)
             norm_disp = disp / (mean_disp + 1e-7)
             smooth_loss = get_smooth_loss(norm_disp, color)
+            outputs[('smooth_loss',0, scale)] = smooth_loss.clone()
+            smooth_loss = self.opt.disparity_smoothness * smooth_loss.mean() / (2 ** scale)
 
-            loss += self.opt.disparity_smoothness * smooth_loss / (2 ** scale)
             # input output loss
             inputoutput_loss = get_inputoutput_loss(disp, inputs[("disp", 0, scale)])
-            loss += inputoutput_loss / (2 ** scale)
+            outputs[('inputoutput_loss',0, scale)] = inputoutput_loss.clone()
+            inputoutput_loss = inputoutput_loss.mean() / (2 ** scale)
+
+            # accumulate losses
+            loss = reproject_loss + smooth_loss + inputoutput_loss 
             total_loss += loss
             losses["loss/{}".format(scale)] = loss
+            losses["reproject_loss/{}".format(scale)] = reproject_loss
+            losses["smooth_loss/{}".format(scale)] = smooth_loss
+            losses["inputoutput_loss/{}".format(scale)] = inputoutput_loss
 
         total_loss /= self.num_scales
         losses["loss"] = total_loss
@@ -516,6 +528,26 @@ class Trainer:
                 writer.add_image(
                     "pred_depth_{}/{}".format(s, j),
                     normalize_image(outputs[("depth", 0, s)][j]), self.step)
+                
+                # add photometric loss ir0 => ir1
+                writer.add_image(
+                    "reproject_ir0_ir1_{}/{}".format(s, j),
+                    normalize_image(outputs[("reproject_ir0_ir1", 0, s)][j]), self.step)
+
+                # add photometric loss ir1 => ir0
+                writer.add_image(
+                    "reproject_ir1_ir0_{}/{}".format(s, j),
+                    normalize_image(outputs[("reproject_ir1_ir0", 0, s)][j]), self.step)
+                
+                # add smoothness loss
+                writer.add_image(
+                    "smooth_loss_{}/{}".format(s, j),
+                    normalize_image(outputs[("smooth_loss", 0, s)][j]), self.step)
+                
+                # add input/output loss
+                writer.add_image(
+                    "inputoutput_loss_{}/{}".format(s, j),
+                    normalize_image(outputs[("inputoutput_loss", 0, s)][j]), self.step)
 
                 if self.opt.predictive_mask:
                     for f_idx, frame_id in enumerate(self.opt.frame_ids[1:]):

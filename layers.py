@@ -232,18 +232,20 @@ def get_smooth_loss(disp, img):
     grad_disp_x *= torch.exp(-grad_img_x)
     grad_disp_y *= torch.exp(-grad_img_y)
 
-    return grad_disp_x.mean() + grad_disp_y.mean()
+    loss = grad_disp_x[:,:,:-1,:] + grad_disp_y[:,:,:,:-1]
+
+    return loss
 
 def get_inputoutput_loss(pred, input):
 
     # in disparity missing values should be 1
     # we don't want to penalize these values
-    mask = input > 0.0
-    diff = pred[mask] - input[mask]
+    mask = input == 0.0
+    diff = pred - input
+    diff[mask] = 0
 
     #l1 loss
-    loss = torch.mean(abs(diff))
-
+    loss = abs(diff)
     return loss
 
 class SSIM(nn.Module):
