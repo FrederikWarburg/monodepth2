@@ -52,7 +52,7 @@ class TartanAirDataset(MonoDataset):
         return color
 
 class TartanAirOdomDataset(TartanAirDataset):
-    """TartanAir dataset for odometry training and testing
+    """RealSense dataset for odometry training and testing
     """
     def __init__(self, *args, **kwargs):
         super(TartanAirOdomDataset, self).__init__(*args, **kwargs)
@@ -68,7 +68,7 @@ class TartanAirOdomDataset(TartanAirDataset):
 
 
 class TartanAirDepthDataset(TartanAirDataset):
-    """TartanAir dataset which uses the updated ground truth depth maps
+    """RealSense dataset which uses the updated ground truth depth maps
     """
     def __init__(self, *args, **kwargs):
         super(TartanAirDepthDataset, self).__init__(*args, **kwargs)

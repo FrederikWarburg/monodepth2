@@ -31,6 +31,11 @@ class MonodepthOptions:
                                  type=str,
                                  help="the name of the folder to save the model in",
                                  default="mdp")
+        self.parser.add_argument("--input",
+                                 type=str,
+                                 help="the sensors to use",
+                                 default="depth",
+                                 choices=['depth', 'depth+rgb'])
         self.parser.add_argument("--split",
                                  type=str,
                                  help="which training split to use",
@@ -45,7 +50,7 @@ class MonodepthOptions:
                                  type=str,
                                  help="dataset to train on",
                                  default="kitti",
-                                 choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test", "tartanair_depth", "tartanair_odom"])
+                                 choices=["kitti", "kitti_odom", "kitti_depth", "kitti_test", "tartanair_depth", "realsense_depth"])
         self.parser.add_argument("--png",
                                  help="if set, trains from raw KITTI png files (instead of jpgs)",
                                  action="store_true")
@@ -73,7 +78,7 @@ class MonodepthOptions:
         self.parser.add_argument("--max_depth",
                                  type=float,
                                  help="maximum depth",
-                                 default=100.0)
+                                 default=10.0)
         self.parser.add_argument("--use_stereo",
                                  help="if set, uses stereo pair for training",
                                  action="store_true")

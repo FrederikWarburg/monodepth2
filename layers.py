@@ -20,9 +20,23 @@ def disp_to_depth(disp, min_depth, max_depth):
     """
     min_disp = 1 / max_depth
     max_disp = 1 / min_depth
+    #mask = disp < min_depth
+    scaled_disp = min_disp + (max_disp - min_disp) * disp
+    depth = 1 / scaled_disp
+    #depth[mask] = 0
+    return scaled_disp, depth
+
+def depth_to_disp(depth, min_depth, max_depth):
+    """Convert network's sigmoid output into depth prediction
+    The formula for this conversion is given in the 'additional considerations'
+    section of the paper.
+    """
+    min_disp = 1 / max_depth
+    max_disp = 1 / min_depth
     scaled_disp = min_disp + (max_disp - min_disp) * disp
     depth = 1 / scaled_disp
     return scaled_disp, depth
+
 
 
 def transformation_from_parameters(axisangle, translation, invert=False):
@@ -161,8 +175,10 @@ class BackprojectDepth(nn.Module):
                                        requires_grad=False)
 
     def forward(self, depth, inv_K):
+
+        depth = depth.view(self.batch_size, 1, -1)
         cam_points = torch.matmul(inv_K[:, :3, :3], self.pix_coords)
-        cam_points = depth.view(self.batch_size, 1, -1) * cam_points
+        cam_points = depth * cam_points
         cam_points = torch.cat([cam_points, self.ones], 1)
 
         return cam_points
@@ -179,7 +195,7 @@ class Project3D(nn.Module):
         self.width = width
         self.eps = eps
 
-    def forward(self, points, K, T):
+    def forward(self, points, K, T, depth = False):
         P = torch.matmul(K, T)[:, :3, :]
 
         cam_points = torch.matmul(P, points)
@@ -190,6 +206,10 @@ class Project3D(nn.Module):
         pix_coords[..., 0] /= self.width - 1
         pix_coords[..., 1] /= self.height - 1
         pix_coords = (pix_coords - 0.5) * 2
+
+        if depth:
+            return pix_coords, cam_points[:, 2, :].view(self.batch_size, 1, self.height, self.width)
+
         return pix_coords
 
 
@@ -214,6 +234,17 @@ def get_smooth_loss(disp, img):
 
     return grad_disp_x.mean() + grad_disp_y.mean()
 
+def get_inputoutput_loss(pred, input):
+
+    # in disparity missing values should be 1
+    # we don't want to penalize these values
+    mask = input > 0.0
+    diff = pred[mask] - input[mask]
+
+    #l1 loss
+    loss = torch.mean(abs(diff))
+
+    return loss
 
 class SSIM(nn.Module):
     """Layer to compute the SSIM loss between a pair of images

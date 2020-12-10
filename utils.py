@@ -9,7 +9,7 @@ import os
 import hashlib
 import zipfile
 from six.moves import urllib
-
+import torch
 
 def readlines(filename):
     """Read all the lines in a text file and return as a list
@@ -19,11 +19,14 @@ def readlines(filename):
     return lines
 
 
-def normalize_image(x):
+def normalize_image(x,ma = None,mi = None):
     """Rescale image pixels to span range [0, 1]
     """
-    ma = float(x.max().cpu().data)
-    mi = float(x.min().cpu().data)
+    if ma is None or mi is None:
+        ma = float(x.max().cpu().data)
+        mi = float(x.min().cpu().data)
+    else:
+        x = torch.clamp(x, mi,ma)
     d = ma - mi if ma != mi else 1e5
     return (x - mi) / d
 

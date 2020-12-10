@@ -30,5 +30,12 @@ python ../train.py --model_name S_640x192_baseline \
 # Tartanair locally
 python train.py --model_name S_416x128 \
   --data_path ../../data/TartanAirIndoorEurocFormatReduced/ \
-  --use_stereo --frame_ids 0 --split tartanair \
-  --height 240 --width 320 --num_workers 2
+  --use_stereo --frame_ids 0 --split tartanair --dataset tartanair_depth \
+  --height 224 --width 320 --num_workers 2
+
+
+  # Tartanair titan
+python train.py --model_name S_416x128 \
+  --data_path /media/slamcore/frederik/TartanAirIndoorEurocFormat/ \
+  --use_stereo --frame_ids 0 --split tartanair --dataset tartanair_depth \
+  --height 480 --width 640 --num_workers 8

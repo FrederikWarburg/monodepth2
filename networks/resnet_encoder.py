@@ -18,11 +18,16 @@ class ResNetMultiImageInput(models.ResNet):
     """Constructs a resnet model with varying number of input images.
     Adapted from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
     """
-    def __init__(self, block, layers, num_classes=1000, num_input_images=1):
+    def __init__(self, block, layers, num_classes=1000, num_input_images=1, input="depth"):
         super(ResNetMultiImageInput, self).__init__(block, layers)
         self.inplanes = 64
-        self.conv1 = nn.Conv2d(
-            num_input_images * 3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        if input == "depth":
+            self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        elif input == "depth+rgb":
+            self.conv1 = nn.Conv2d(4, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        else:
+            self.conv1 = nn.Conv2d(num_input_images * 3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -76,19 +81,32 @@ class ResnetEncoder(nn.Module):
         if num_layers not in resnets:
             raise ValueError("{} is not a valid number of resnet layers".format(num_layers))
 
-        if num_input_images > 1:
-            self.encoder = resnet_multiimage_input(num_layers, pretrained, num_input_images)
-        else:
-            self.encoder = resnets[num_layers](pretrained)
+        #if num_input_images > 1:
+        #    self.encoder = resnet_multiimage_input(num_layers, pretrained, num_input_images)
+        #else:
+        self.encoder = resnets[num_layers](pretrained)
+        self.encoder.conv1_dep = nn.Conv2d(1,16, kernel_size=7, stride=2, padding=3, bias=False)
+        self.encoder.bn1_dep = nn.BatchNorm2d(16)
+
+        self.encoder.conv1_rgb = nn.Conv2d(3,48, kernel_size=7, stride=2, padding=3, bias=False)
+        self.encoder.bn1_rgb = nn.BatchNorm2d(48)
 
         if num_layers > 34:
             self.num_ch_enc[1:] *= 4
 
-    def forward(self, input_image):
+    def forward(self, x_dep, x_rgb):
         self.features = []
-        x = (input_image - 0.45) / 0.225
-        x = self.encoder.conv1(x)
-        x = self.encoder.bn1(x)
+        #TODO: replace with normalization of input images
+        #x = (input_image - 0.45) / 0.225
+
+        x_dep = self.encoder.conv1_dep(x_dep)
+        x_dep = self.encoder.bn1_dep(x_dep)
+
+        x_rgb = self.encoder.conv1_rgb(x_rgb)
+        x_rgb = self.encoder.bn1_rgb(x_rgb)
+
+        x = torch.cat((x_rgb, x_dep), dim=1)
+
         self.features.append(self.encoder.relu(x))
         self.features.append(self.encoder.layer1(self.encoder.maxpool(self.features[-1])))
         self.features.append(self.encoder.layer2(self.features[-1]))
