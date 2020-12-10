@@ -458,7 +458,7 @@ class RealSenseDepth(data.Dataset):
     def dep_to_disp(self, dep):
 
         mask = (dep < self.min_depth) * (dep > self.max_depth)
-        #dep = np.clip(dep, self.min_depth, self.max_depth)
+        dep = np.clip(dep, min= self.min_depth) # avoid division with zero
         scaled_disp = (1 - dep*self.min_depth)/ (dep*self.max_depth)
         scaled_disp[mask] = 0
         scaled_disp_im = Image.fromarray(scaled_disp)
