@@ -457,10 +457,18 @@ class RealSenseDepth(data.Dataset):
 
     def dep_to_disp(self, dep):
 
-        mask = (dep < self.min_depth) * (dep > self.max_depth)
-        dep = np.clip(dep, a_min= self.min_depth,  a_max = self.max_depth) # avoid division with zero
-        scaled_disp = (1 - dep*self.min_depth)/ (dep*self.max_depth)
-        scaled_disp[mask] = 0
+        mask = (dep > self.min_depth) * (dep < self.max_depth)
+        #dep = np.clip(dep, a_min= self.min_depth,  a_max = self.max_depth) # avoid division with zero
+        scaled_disp = np.zeros_like(dep)
+        scaled_disp[mask] = (1 - dep[mask]*self.min_depth)/ (dep[mask]*self.max_depth)
+
+        """
+        import matplotlib.pyplot as plt
+        plt.imshow(scaled_disp)
+        plt.title("aligned_disp")
+        plt.show()
+        """
+
         scaled_disp_im = Image.fromarray(scaled_disp)
 
         return scaled_disp_im
@@ -468,6 +476,13 @@ class RealSenseDepth(data.Dataset):
     def load_disp(self, path):
         
         dep = self.load_depth(path)
+
+        """
+        import matplotlib.pyplot as plt
+        plt.imshow(dep)
+        plt.title("depth")
+        plt.show()
+        """
         
         dep = self.align_depth_to_rgb(dep)
 
@@ -475,7 +490,7 @@ class RealSenseDepth(data.Dataset):
         
         """
         import matplotlib.pyplot as plt
-        plt.imshow(disp)
+        plt.imshow(np.asarray(disp))
         plt.title("aligned_disp")
         plt.show()
         """
