@@ -427,14 +427,16 @@ class Trainer:
             inputoutput_loss = get_inputoutput_loss(disp, inputs[("disp", 0, scale)])
             outputs[('inputoutput_loss',0, scale)] = inputoutput_loss.clone()
             inputoutput_loss = self.opt.inputoutput_weight * inputoutput_loss.mean() / (2 ** scale)
-
+            
+            """
             import matplotlib.pyplot as plt
             plt.subplot(1,2,1)
             plt.imshow(outputs[('inputoutput_loss',0, scale)][0,0].cpu().detach().numpy())
             plt.subplot(1,2,2)
             plt.imshow(inputs[('disp',0, scale)][0,0].cpu().detach().numpy())
             plt.show()
-
+            """
+            
             # accumulate losses
             loss = reproject_loss + smooth_loss + inputoutput_loss 
             total_loss += loss
