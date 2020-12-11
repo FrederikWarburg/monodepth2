@@ -426,7 +426,7 @@ class Trainer:
             # input output loss
             inputoutput_loss = get_inputoutput_loss(disp, inputs[("disp", 0, scale)])
             outputs[('inputoutput_loss',0, scale)] = inputoutput_loss.clone()
-            inputoutput_loss = inputoutput_loss.mean() / (2 ** scale)
+            inputoutput_loss = self.opt.inputoutput_weight * inputoutput_loss.mean() / (2 ** scale)
 
             # accumulate losses
             loss = reproject_loss + smooth_loss + inputoutput_loss 
