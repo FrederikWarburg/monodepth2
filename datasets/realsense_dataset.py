@@ -115,6 +115,8 @@ class RealSenseDepth(data.Dataset):
 
         with open(calibration_file) as file:
             calib = yaml.load(file, Loader=yaml.FullLoader)
+
+        self.offset = calib["camera_params"]["timeshift_cam_imu"]
         
         # Inferred0
         self.K_ir0, self.K_norm_ir0, self.T_ir0, _ = get_intrinsic_extrinsic(calib['cameras'][0])
@@ -383,7 +385,7 @@ class RealSenseDepth(data.Dataset):
 
             seq_data, idx = self.load_seq(os.path.join(datapath, seq))
             
-            seq_data['T_WB'], idx_iter = self.interpolate(seq_data['T_WB'], seq_data['ir0'])
+            seq_data['T_WB'], idx_iter = self.interpolate(seq_data['T_WB'], seq_data['ir0'], self.offset)
             
             # dont use first and last as we need them for prev and next frame
             idx = np.asarray([i for i in idx if i in idx_iter[1:-1]])
@@ -403,9 +405,9 @@ class RealSenseDepth(data.Dataset):
                 
         return data, index
 
-    def interpolate(self, T_WB, ir0):
+    def interpolate(self, T_WB, ir0, offset):
 
-        t = T_WB[:,0].astype(float)
+        t = T_WB[:,0].astype(float) - offset
         t_ir0 = ir0[:,0].astype(float)
 
         # times
