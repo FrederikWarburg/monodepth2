@@ -258,9 +258,10 @@ class Trainer:
         """
         for scale in self.opt.scales:
             disp = outputs[("disp", scale)]
-            if self.opt.v1_multiscale:
+
+            if self.opt.v1_multiscale: # use monodepthv1 multidepth
                 source_scale = scale
-            else:
+            else: # use monodepthv2 multidepth
                 disp = F.interpolate(
                     disp, [self.opt.height, self.opt.width], mode="bilinear", align_corners=False)
                 source_scale = 0
@@ -272,43 +273,35 @@ class Trainer:
             K_inv = inputs[("inv_K_rgb", source_scale)]
             cam_points = self.backproject_depth[source_scale](depth, K_inv)
 
-            ####
             # project into ir0
-            ####
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir0", t = 0)
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir0", t = 1)
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir0", t = -1)
              
-            K = inputs[("K_ir0", source_scale)]
-            T = torch.matmul(torch.inverse(inputs["T_ir0"]), inputs["T_rgb"])
-            pix_coords = self.project_3d[source_scale](cam_points, K, T)
-
-            # store intermediate value
-            outputs[("sample0", 0, scale)] = pix_coords
-
-            # get intensenties
-            ir0 = inputs[("ir0", 0, source_scale)]
-            outputs[("ir0", 0, scale)] = F.grid_sample(
-                ir0, pix_coords, padding_mode="border", align_corners=False)
-
-            if not self.opt.disable_automasking:
-                outputs[("ir0_identity", 0, scale)] = inputs[("ir0", 0, source_scale)]
-
-            ####
             # project into ir1
-            ####
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir1", t = 0)
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir1", t = 1)
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir1", t = -1)
 
-            K = inputs[("K_ir1", source_scale)]
-            T = torch.matmul(torch.inverse(inputs["T_ir1"]), inputs["T_rgb"])
-            pix_coords = self.project_3d[source_scale](cam_points, K, T)
+    def project_and_sample(self, inputs, cam_points, outputs, source_scale, scale, sensor, t):
 
-            # store intermediate value
-            outputs[("sample1", 0, scale)] = pix_coords
+        K = inputs[("K_{}".format(sensor), source_scale)]
+        T_sensor = inputs[("T_{}".format(sensor), t)]
+        T = torch.matmul(torch.inverse(T_sensor), inputs["T_rgb"])
 
-            # get intensenties
-            ir1 = inputs[("ir1", 0, source_scale)]
-            outputs[("ir1", 0, scale)] = F.grid_sample(
-                ir1, pix_coords, padding_mode="border", align_corners=False)
+        pix_coords = self.project_3d[source_scale](cam_points, K, T)
 
-            if not self.opt.disable_automasking:
-                outputs[("ir1_identity", 0, scale)] = inputs[("ir1", 0, source_scale)]
+        # store intermediate value
+        outputs[("sample_{}".format(sensor), t, scale)] = pix_coords
+
+        # get intensenties
+        outputs[("{}".format(sensor), t, scale)] = F.grid_sample(
+            inputs[("{}".format(sensor), t, source_scale)],
+            outputs[("sample_{}".format(sensor), t, scale)],
+            padding_mode="border", align_corners=False)
+        
+        return outputs
+
 
     def compute_reprojection_loss(self, pred, target):
         """Computes reprojection loss between a batch of predicted and target images
@@ -342,17 +335,54 @@ class Trainer:
             disp = outputs[("disp", scale)]
             color = inputs[("color", 0, scale)]
 
-            target = inputs[("ir0", 0, source_scale)]
+            # t = 0: stereo
+            target = outputs[("ir0", 0, source_scale)]
             pred = outputs[("ir1", 0, scale)]
             reprojection_loss = self.compute_reprojection_loss(pred, target)
             reprojection_losses.append(reprojection_loss)
             outputs[("reproject_ir0_ir1",0,scale)] = reprojection_loss.clone()
 
-            target = inputs[("ir1", 0, source_scale)]
-            pred = outputs[("ir0", 0, scale)]
+            # t = -1: stereo
+            target = outputs[("ir0", -1, source_scale)]
+            pred = outputs[("ir1", -1, scale)]
             reprojection_loss = self.compute_reprojection_loss(pred, target)
             reprojection_losses.append(reprojection_loss)
-            outputs[("reproject_ir1_ir0",0,scale)] = reprojection_loss.clone()
+            outputs[("reproject_ir0_ir1",-1,scale)] = reprojection_loss.clone()
+
+            # t = 1: stereo
+            target = outputs[("ir0", 1, source_scale)]
+            pred = outputs[("ir1", 1, scale)]
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_ir0_ir1",1,scale)] = reprojection_loss.clone()
+
+            # t = -1 --> t = 1 : stereo
+            target = outputs[("ir0", -1, source_scale)]
+            pred = outputs[("ir1", 1, scale)]
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_tmp_ir0_ir1",1,scale)] = reprojection_loss.clone()
+
+            # t = -1 --> t = 1 : stereo
+            target = outputs[("ir1", -1, source_scale)]
+            pred = outputs[("ir0", 1, scale)]
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_tmp_ir0_ir1",1,scale)] = reprojection_loss.clone()
+
+            # t = -1 --> t = 1 : temporal
+            target = outputs[("ir0", -1, source_scale)]
+            pred = outputs[("ir0", 1, scale)]
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_tmp_ir0_ir0",0,scale)] = reprojection_loss.clone()
+
+            # t = -1 --> t = 1 : temporal
+            target = outputs[("ir1", -1, source_scale)]
+            pred = outputs[("ir1", 1, scale)]
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_tmp_ir0_ir0",0,scale)] = reprojection_loss.clone()
 
             reprojection_losses = torch.cat(reprojection_losses, 1)
 
@@ -457,7 +487,7 @@ class Trainer:
         """
         depth_pred = outputs[("depth", 0, 0)]
         depth_pred = torch.clamp(F.interpolate(
-            depth_pred, [480, 640], mode="bilinear", align_corners=False), 1e-3, 80)
+            depth_pred, [480, 640], mode="bilinear", align_corners=False), self.opt.min_depth, self.opt.max_depth)
         depth_pred = depth_pred.detach()
 
         depth_gt = inputs["depth_gt"]
@@ -528,6 +558,20 @@ class Trainer:
                     "output_ir1_{}_{}/{}".format(0, s, j),
                     outputs[("ir1", 0, s)][j].data, self.step)
 
+                writer.add_image(
+                    "output_ir0_prev_{}_{}/{}".format(0, s, j),
+                    outputs[("ir0", -1, s)][j].data, self.step)
+                writer.add_image(
+                    "output_ir1_prev_{}_{}/{}".format(0, s, j),
+                    outputs[("ir1", -1, s)][j].data, self.step)
+
+                writer.add_image(
+                    "output_ir0_next_{}_{}/{}".format(0, s, j),
+                    outputs[("ir0", 1, s)][j].data, self.step)
+                writer.add_image(
+                    "output_ir1_next_{}_{}/{}".format(0, s, j),
+                    outputs[("ir1", 1, s)][j].data, self.step)
+
                 # add color image
                 writer.add_image(
                     "color_{}_{}/{}".format(0, s, j),
@@ -540,13 +584,18 @@ class Trainer:
                 
                 # add photometric loss ir0 => ir1
                 writer.add_image(
-                    "reproject_ir0_ir1_{}/{}".format(s, j),
+                    "reproject_stereo_curr_{}/{}".format(s, j),
                     normalize_image(outputs[("reproject_ir0_ir1", 0, s)][j]), self.step)
 
-                # add photometric loss ir1 => ir0
+                # add photometric loss ir0 => ir1
                 writer.add_image(
-                    "reproject_ir1_ir0_{}/{}".format(s, j),
-                    normalize_image(outputs[("reproject_ir1_ir0", 0, s)][j]), self.step)
+                    "reproject_stereo_next_{}/{}".format(s, j),
+                    normalize_image(outputs[("reproject_ir0_ir1", 1, s)][j]), self.step)
+
+                # add photometric loss ir0 => ir1
+                writer.add_image(
+                    "reproject_stereo_prev_{}/{}".format(s, j),
+                    normalize_image(outputs[("reproject_ir0_ir1", -1, s)][j]), self.step)
                 
                 # add smoothness loss
                 writer.add_image(

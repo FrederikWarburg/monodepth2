@@ -13,6 +13,9 @@ import PIL.Image as pil
 import pandas as pd
 import cv2
 import scipy
+from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Slerp
+from scipy.interpolate import interp1d
 #from kitti_utils import generate_depth_map
 # Copyright Niantic 2019. Patent Pending. All rights reserved.
 #
@@ -126,7 +129,7 @@ class RealSenseDepth(data.Dataset):
         self.K_rgb, self.K_norm_rgb, self.T_rgb, self.dis_coeff_rgb = get_intrinsic_extrinsic(calib['cameras'][3])
 
         # load data
-        self.data = self.load_data(data_path)
+        self.data, self.index = self.load_data(data_path)
 
         self.resize = {}
         for i in range(self.num_scales):
@@ -254,7 +257,7 @@ class RealSenseDepth(data.Dataset):
         return inputs
 
     def __len__(self):
-        return len(self.data["cam0"])
+        return len(self.index)
 
     def __getitem__(self, index):
         """Returns a single training item from the dataset as a dictionary.
@@ -283,21 +286,66 @@ class RealSenseDepth(data.Dataset):
             3       images resized to (self.width // 8, self.height // 8)
         """
 
+        frame_idx = self.index[index]
+
         inputs = {}
 
-        inputs[("color", 0, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][index][1]))
-        inputs[("disp", 0, -1)] = self.load_disp(self.data['depth0'][index][1])
-        inputs[("ir0", 0, -1)] = self.load_im(self.data['ir0'][index][1])
-        inputs[("ir1", 0, -1)] = self.load_im(self.data['ir1'][index][1])
+        inputs[("color", 0, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx][1]))
+        inputs[("disp", 0, -1)] = self.load_disp(self.data['depth0'][frame_idx][1])
+
+        inputs[("ir0", 0, -1)] = self.load_im(self.data['ir0'][frame_idx][1])
+        inputs[("ir0", -1, -1)] = self.load_im(self.data['ir0'][frame_idx-1][1])
+        inputs[("ir0", 1, -1)] = self.load_im(self.data['ir0'][frame_idx+1][1])
+
+        inputs[("ir1", 0, -1)] = self.load_im(self.data['ir1'][frame_idx][1])
+        inputs[("ir1", -1, -1)] = self.load_im(self.data['ir1'][frame_idx-1][1])
+        inputs[("ir1", 1, -1)] = self.load_im(self.data['ir1'][frame_idx+1][1])
+        
+        T_WB_prev = self.data['T_WB'][frame_idx-1]
+        T_WB_curr = self.data['T_WB'][frame_idx]
+        T_WB_next = self.data['T_WB'][frame_idx+1]
+        T_BS = np.diag(np.ones(4))
 
         inputs= self.preprocess(inputs)
 
-        inputs['T_ir0'] = self.T_ir0
-        inputs['T_ir1'] = self.T_ir1
-        inputs['T_dep'] = self.T_dep
-        inputs['T_rgb'] = self.T_rgb
+        # camera to world (T_WC = T_WB @ T_BS @ T_SC)
+        inputs[('T_ir0', 0)] = np.matmul(np.matmul(T_WB_curr, T_BS), self.T_ir0).astype(dtype=np.float32)
+        inputs[('T_ir0', -1)] = np.matmul(np.matmul(T_WB_prev, T_BS), self.T_ir0).astype(dtype=np.float32)
+        inputs[('T_ir0', 1)] = np.matmul(np.matmul(T_WB_next, T_BS), self.T_ir0).astype(dtype=np.float32)
+        
+        inputs[('T_ir1',0)] = np.matmul(np.matmul(T_WB_curr, T_BS), self.T_ir1).astype(dtype=np.float32)
+        inputs[('T_ir1',-1)] = np.matmul(np.matmul(T_WB_prev, T_BS), self.T_ir1).astype(dtype=np.float32)
+        inputs[('T_ir1',1)] = np.matmul(np.matmul(T_WB_next, T_BS), self.T_ir1).astype(dtype=np.float32)
+
+        inputs['T_dep'] = np.matmul(np.matmul(T_WB_curr, T_BS), self.T_dep).astype(dtype=np.float32)
+        inputs['T_rgb'] = np.matmul(np.matmul(T_WB_curr, T_BS), self.T_rgb).astype(dtype=np.float32)
 
         return inputs
+
+    def calc_diff(self, frame1, frame0):
+        # calulate transformation from frame0 to frame1
+        #        
+        t0 = frame0[1:4]
+        q0 = R.from_quat(frame0[4:])
+
+        t1 = frame1[1:4]
+        q1 = R.from_quat(frame1[4:])
+
+        # relative translation
+        t = t1 - t0
+
+        # relative rotation
+        q1_inv = q1.inv()
+        q = q0 * q1_inv
+
+        # form quaternioms to matrix
+        R = q.as_matrix()
+
+        T = np.diag(4)
+        T[:3, :3] = R
+        T[3:, :3] = t
+
+        return T
 
     def load_seq(self, datapath):
 
@@ -311,28 +359,91 @@ class RealSenseDepth(data.Dataset):
         for sensor in ['cam0', 'depth0', 'ir0', 'ir1']:
             data[sensor] = data[sensor][:min(_lengths)]
             data[sensor][:,1] = [os.path.join(datapath, sensor, 'data', fn) for fn in data[sensor][:,1]]
+
+        # load postion information
+        data['T_WB'] = pd.read_csv(os.path.join(datapath, 'position', 'optimised_trajectory_0.csv')).values       
+
         #only with laser
-        if False:
-            pass
+        if True:
+            idx = np.where(data["ir0"][:,-1] == 150)[0]
+
+            # remove first and last index in sequence
+            idx = np.asarray([i for i in idx if i not in [0, len(idx) - 1]])
+        else:
+            idx = np.arange(len(data["ir0"]))
             #TODO: filter such that we only use the images with the sensor on.
 
-        return data
+        return data, idx
 
     def load_data(self, datapath):
         
+        index = []
         data = {}
         for seq in os.listdir(datapath):
 
-            seq_data = self.load_seq(os.path.join(datapath, seq))
+            seq_data, idx = self.load_seq(os.path.join(datapath, seq))
+            
+            seq_data['T_WB'], idx_iter = self.interpolate(seq_data['T_WB'], seq_data['ir0'])
+            
+            # dont use first and last as we need them for prev and next frame
+            idx = np.asarray([i for i in idx if i in idx_iter[1:-1]])
 
-            for sensor in ['cam0', 'depth0', 'ir0', 'ir1']:
+            if "ir0" in data:
+                index.extend(idx + len(data["ir0"]))
+            else:
+                index.extend(idx)
+
+            for sensor in ['cam0', 'depth0', 'ir0', 'ir1', 'T_WB']:
 
                 if sensor not in data:
                     data[sensor] = seq_data[sensor]
                 else:
                     data[sensor] = np.concatenate((data[sensor], seq_data[sensor]), axis=0)
+                    
                 
-        return data
+        return data, index
+
+    def interpolate(self, T_WB, ir0):
+
+        t = T_WB[:,0].astype(float)
+        t_ir0 = ir0[:,0].astype(float)
+
+        # times
+        idx = np.where((t_ir0 > min(t)) * (t_ir0 < max(t)))[0]
+        t_ir0 = t_ir0[idx]
+
+        # interpolate  translation
+        x = T_WB[:,1]
+        y = T_WB[:,2]
+        z = T_WB[:,3]
+
+        f = interp1d(t, x)
+        new_x = f(t_ir0)
+
+        f = interp1d(t, y)
+        new_y = f(t_ir0)
+
+        f = interp1d(t, z)
+        new_z = f(t_ir0)
+
+        # interpolate rotations
+        q = T_WB[:,4:]
+        q = R.from_quat(q)
+
+        f = Slerp(t, q)
+        q_new = f(t_ir0)
+
+        # initialize T
+        T = np.diag(np.ones(4))
+        T = np.repeat(T[None,:,:],len(q_new), axis=0)
+
+        # insert into T
+        T[:,:3,:3] = q_new.as_matrix()
+        T[:,0,3] = new_x
+        T[:,1,3] = new_y
+        T[:,2,3] = new_z
+
+        return T, idx
 
     def undistort_rgb(self, im):
         
