@@ -76,7 +76,7 @@ frontend_params:
   min_matches_tracking: 8
   radius_anms: 17
   keyframe_hybrid_params:
-    min_num_frames_after_gyro_saturation: 200S
+    min_num_frames_after_gyro_saturation: 200
     min_num_frames_after_accelerometer_saturation: 200
 
 misc_params:
