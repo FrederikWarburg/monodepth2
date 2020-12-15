@@ -532,8 +532,21 @@ class Trainer:
             
             input_disp = inputs[("disp", 0, 0)][j]
 
+            """
+            import matplotlib.pyplot as plt
+            plt.imshow(input_disp.detach().cpu().numpy()[0])
+            plt.title("disp")
+            plt.show()
+            """
+            
             _, input_depth = disp_to_depth(input_disp, self.opt.min_depth, self.opt.max_depth)
-            writer.add_image("input_depth_{}/{}".format(0, j), input_depth, self.step)
+
+            """
+            plt.imshow(input_depth.detach().cpu().numpy()[0])
+            plt.title("input_depth_{}/{}".format(0, j))
+            plt.show()
+            """
+            writer.add_image("input_depth_{}/{}".format(0, j), normalize_image(input_depth), self.step)
 
             #plt.figure(figsize=(15,5)); plt.subplot(1,3,1)
             #plt.imshow(input_disp[0].cpu().numpy()); plt.title("disp"); plt.subplot(1,3,2)
