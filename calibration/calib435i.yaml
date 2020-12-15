@@ -103,4 +103,3 @@ segmentation_params:
   network_path: "resnet50_coco_dcn_indoor12_1024" # Path to the DNN weights
   deformable_convolution_head: true
   image_size: [ 1024, 1024 ]
-
