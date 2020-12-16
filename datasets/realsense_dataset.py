@@ -401,9 +401,7 @@ class RealSenseDepth(data.Dataset):
                     data[sensor] = seq_data[sensor]
                 else:
                     data[sensor] = np.concatenate((data[sensor], seq_data[sensor]), axis=0)
-                    
-                print(sensor, len(data[sensor]), max(index), len(index))
-                
+                                    
         return data, index
 
     def interpolate(self, T_WB, ir0, offset):
@@ -413,7 +411,7 @@ class RealSenseDepth(data.Dataset):
 
         # times
         idx = np.where((t_ir0 > min(t)) * (t_ir0 < max(t)))[0]
-        t_ir0 = t_ir0[idx]
+        t_ir0_with_pos = t_ir0[idx]
 
         # interpolate  translation
         x = T_WB[:,1]
@@ -421,30 +419,31 @@ class RealSenseDepth(data.Dataset):
         z = T_WB[:,3]
 
         f = interp1d(t, x)
-        new_x = f(t_ir0)
+        new_x = f(t_ir0_with_pos)
 
         f = interp1d(t, y)
-        new_y = f(t_ir0)
+        new_y = f(t_ir0_with_pos)
 
         f = interp1d(t, z)
-        new_z = f(t_ir0)
+        new_z = f(t_ir0_with_pos)
 
         # interpolate rotations
         q = T_WB[:,4:]
         q = R.from_quat(q)
 
         f = Slerp(t, q)
-        q_new = f(t_ir0)
+        q_new = f(t_ir0_with_pos)
 
         # initialize T
         T = np.diag(np.ones(4))
-        T = np.repeat(T[None,:,:],len(q_new), axis=0)
+        T = np.repeat(T[None,:,:],len(t_ir0), axis=0)
 
-        # insert into T
-        T[:,:3,:3] = q_new.as_matrix()
-        T[:,0,3] = new_x
-        T[:,1,3] = new_y
-        T[:,2,3] = new_z
+        # insert into T (here we have some padding to get the same length of the images)
+        # This makes indexing in getitem significantly easier
+        T[min(idx):(max(idx)+1),:3,:3] = q_new.as_matrix()
+        T[min(idx):(max(idx)+1),0,3] = new_x
+        T[min(idx):(max(idx)+1),1,3] = new_y
+        T[min(idx):(max(idx)+1),2,3] = new_z
 
         return T, idx
 
