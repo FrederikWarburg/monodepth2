@@ -356,14 +356,14 @@ class Trainer:
             reprojection_losses.append(reprojection_loss)
             outputs[("reproject_ir0_ir1",1,scale)] = reprojection_loss.clone()
 
-            # t = -1 --> t = 1 : stereo
+            # t = -1 --> t = 1 : stereo + temporal
             target = outputs[("ir0", -1, source_scale)]
             pred = outputs[("ir1", 1, scale)]
             reprojection_loss = self.compute_reprojection_loss(pred, target)
             reprojection_losses.append(reprojection_loss)
             outputs[("reproject_tmp_ir0_ir1",1,scale)] = reprojection_loss.clone()
 
-            # t = -1 --> t = 1 : stereo
+            # t = -1 --> t = 1 : stereo + temporal
             target = outputs[("ir1", -1, source_scale)]
             pred = outputs[("ir0", 1, scale)]
             reprojection_loss = self.compute_reprojection_loss(pred, target)
@@ -383,6 +383,20 @@ class Trainer:
             reprojection_loss = self.compute_reprojection_loss(pred, target)
             reprojection_losses.append(reprojection_loss)
             outputs[("reproject_tmp_ir0_ir0",0,scale)] = reprojection_loss.clone()
+
+            # t = 0 --> t = -1 : temporal (rgb)
+            target = outputs[("rgb", 0, source_scale)]
+            pred = outputs[("rgb", -1, scale)]
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_tmp_rgb",1,scale)] = reprojection_loss.clone()
+
+            # t = 0 --> t = 1 : temporal (rgb)
+            target = outputs[("rgb", 0, source_scale)]
+            pred = outputs[("rgb", 1, scale)]
+            reprojection_loss = self.compute_reprojection_loss(pred, target)
+            reprojection_losses.append(reprojection_loss)
+            outputs[("reproject_tmp_rgb",-1,scale)] = reprojection_loss.clone()
 
             reprojection_losses = torch.cat(reprojection_losses, 1)
 
@@ -554,21 +568,39 @@ class Trainer:
             #plt.imshow(normalize_image(input_depth, self.opt.max_depth, self.opt.min_depth)[0].cpu().numpy()); plt.title("norm depth"); plt.show()
 
             for s in self.opt.scales:
+
+                ###
+                # Inputs and predictions
+                ###
                 
                 # add ir images
                 writer.add_image(
-                    "input_ir0_{}_{}/{}".format(0, s, j),
+                    "input_ir0_curr_{}_{}/{}".format(0, s, j),
                     inputs[("ir0", 0, s)][j].data, self.step)
                 writer.add_image(
-                    "input_ir1_{}_{}/{}".format(0, s, j),
+                    "input_ir1_curr_{}_{}/{}".format(0, s, j),
                     inputs[("ir1", 0, s)][j].data, self.step)
+
+                # add color image
+                writer.add_image(
+                    "color_{}_{}/{}".format(0, s, j),
+                    inputs[("color", 0, s)][j].data, self.step)
+
+                # add prediction
+                writer.add_image(
+                    "pred_depth_{}/{}".format(s, j),
+                    normalize_image(outputs[("depth", 0, s)][j]), self.step)
+
+                ###
+                # Warpings
+                ###
 
                 # add ir reprojections images
                 writer.add_image(
-                    "output_ir0_{}_{}/{}".format(0, s, j),
+                    "output_ir0_curr_{}_{}/{}".format(0, s, j),
                     outputs[("ir0", 0, s)][j].data, self.step)
                 writer.add_image(
-                    "output_ir1_{}_{}/{}".format(0, s, j),
+                    "output_ir1_curr_{}_{}/{}".format(0, s, j),
                     outputs[("ir1", 0, s)][j].data, self.step)
 
                 writer.add_image(
@@ -585,16 +617,19 @@ class Trainer:
                     "output_ir1_next_{}_{}/{}".format(0, s, j),
                     outputs[("ir1", 1, s)][j].data, self.step)
 
-                # add color image
+                # add rgb reprojection images
                 writer.add_image(
-                    "color_{}_{}/{}".format(0, s, j),
-                    inputs[("color", 0, s)][j].data, self.step)
+                    "output_rgb_next_{}_{}/{}".format(0, s, j),
+                    outputs[("rgb", 1, s)][j].data, self.step)
+                writer.add_image(
+                    "output_rgb_prev_{}_{}/{}".format(0, s, j),
+                    outputs[("rgb", -1, s)][j].data, self.step)
 
-                # add prediction
-                writer.add_image(
-                    "pred_depth_{}/{}".format(s, j),
-                    normalize_image(outputs[("depth", 0, s)][j]), self.step)
-                
+
+                ###
+                # Losses
+                ###
+
                 # add photometric loss ir0 => ir1
                 writer.add_image(
                     "reproject_stereo_curr_{}/{}".format(s, j),
@@ -609,7 +644,17 @@ class Trainer:
                 writer.add_image(
                     "reproject_stereo_prev_{}/{}".format(s, j),
                     normalize_image(outputs[("reproject_ir0_ir1", -1, s)][j]), self.step)
-                
+
+                # add photometric loss rgb => rgb
+                writer.add_image(
+                    "reproject_rgb_next_{}/{}".format(s, j),
+                    normalize_image(outputs[("reproject_tmp_rgb", 1, s)][j]), self.step)
+
+                # add photometric loss rgb => rgb
+                writer.add_image(
+                    "reproject_rgb_prev_{}/{}".format(s, j),
+                    normalize_image(outputs[("reproject_tmp_rgb", -1, s)][j]), self.step)
+
                 # add smoothness loss
                 writer.add_image(
                     "smooth_loss_{}/{}".format(s, j),

@@ -206,7 +206,7 @@ class RealSenseDepth(data.Dataset):
                 
                 inputs[(n, im, i)] = self.to_tensor(np.asarray(f).copy())
 
-                if n == 'color':
+                if n == 'color' and im == 0: # we only want to augment this center image
                     inputs[(n + "_aug", im, i)] = self.to_tensor(self.color_aug(f).copy())
 
         # adjusting intrinsics to match each scale in the pyramid
@@ -292,8 +292,12 @@ class RealSenseDepth(data.Dataset):
 
         inputs = {}
 
-        inputs[("color", 0, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx][1]))
+        
         inputs[("disp", 0, -1)] = self.load_disp(self.data['depth0'][frame_idx][1])
+
+        inputs[("color", 0, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx][1]))
+        inputs[("color", -1, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx - 1][1]))
+        inputs[("color", 1, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx + 1][1]))
 
         inputs[("ir0", 0, -1)] = self.load_im(self.data['ir0'][frame_idx][1])
         inputs[("ir0", -1, -1)] = self.load_im(self.data['ir0'][frame_idx-1][1])
@@ -320,7 +324,10 @@ class RealSenseDepth(data.Dataset):
         inputs[('T_ir1',1)] = np.matmul(np.matmul(T_WB_next, T_BS), self.T_ir1).astype(dtype=np.float32)
 
         inputs['T_dep'] = np.matmul(np.matmul(T_WB_curr, T_BS), self.T_dep).astype(dtype=np.float32)
-        inputs['T_rgb'] = np.matmul(np.matmul(T_WB_curr, T_BS), self.T_rgb).astype(dtype=np.float32)
+
+        inputs[('T_rgb', 0)] = np.matmul(np.matmul(T_WB_curr, T_BS), self.T_rgb).astype(dtype=np.float32)
+        inputs[('T_rgb', -1)] = np.matmul(np.matmul(T_WB_prev, T_BS), self.T_rgb).astype(dtype=np.float32)
+        inputs[('T_rgb', 1)] = np.matmul(np.matmul(T_WB_next, T_BS), self.T_rgb).astype(dtype=np.float32)
 
         return inputs
 
