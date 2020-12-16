@@ -216,7 +216,7 @@ class Trainer:
 
         #if self.opt.input == "depth":
         # Refine depth measurements
-        features = self.models["encoder"](inputs["disp", 0, 0], inputs["color_aug", 0, 0])
+        features = self.models["encoder"](inputs["disp", 0, 0], inputs["rgb_aug", 0, 0])
         outputs = self.models["depth"](features)
         #else:
         # Otherwise, we only feed the image with frame_id 0 through the depth encoder
@@ -274,20 +274,25 @@ class Trainer:
             cam_points = self.backproject_depth[source_scale](depth, K_inv)
 
             # project into ir0
-            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir0", t = 0)
             outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir0", t = 1)
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir0", t = 0)
             outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir0", t = -1)
              
             # project into ir1
-            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir1", t = 0)
             outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir1", t = 1)
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir1", t = 0)
             outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "ir1", t = -1)
+
+            # project into rgb
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "rgb", t = 1)
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "rgb", t = 0)
+            outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "rgb", t = -1)
 
     def project_and_sample(self, inputs, cam_points, outputs, source_scale, scale, sensor, t):
 
         K = inputs[("K_{}".format(sensor), source_scale)]
         T_sensor = inputs[("T_{}".format(sensor), t)]
-        T = torch.matmul(torch.inverse(T_sensor), inputs["T_rgb"])
+        T = torch.matmul(torch.inverse(T_sensor), inputs[("T_rgb",0)])
 
         pix_coords = self.project_3d[source_scale](cam_points, K, T)
 
@@ -333,7 +338,7 @@ class Trainer:
                 source_scale = 0
 
             disp = outputs[("disp", scale)]
-            color = inputs[("color", 0, scale)]
+            color = inputs[("rgb", 0, scale)]
 
             # t = 0: stereo
             target = outputs[("ir0", 0, source_scale)]
@@ -584,7 +589,7 @@ class Trainer:
                 # add color image
                 writer.add_image(
                     "color_{}_{}/{}".format(0, s, j),
-                    inputs[("color", 0, s)][j].data, self.step)
+                    inputs[("rgb", 0, s)][j].data, self.step)
 
                 # add prediction
                 writer.add_image(

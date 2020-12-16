@@ -51,8 +51,8 @@ python train.py --model_name S_416x128 \
 
 
 # Realsense cluster
-python train.py --model_name S_416x128 \
+CUDA_VISIBLE_DEVICES=7 python train.py --model_name S_416x128 \
   --data_path /media/slamcore/frederik/d345i \
   --use_stereo --frame_ids 0 --split tartanair --dataset realsense_depth \
-  --height 480 --width 832 --num_workers 2 --batch_size  4 --log_dir pretrained \
+  --height 480 --width 832 --num_workers 4 --batch_size  4 --log_dir pretrained \
   --calib calibration/ucf_d435i_rgb_sem.yaml --min_depth 0.1 --max_depth 3 --inputoutput_weight 1

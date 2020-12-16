@@ -206,7 +206,7 @@ class RealSenseDepth(data.Dataset):
                 
                 inputs[(n, im, i)] = self.to_tensor(np.asarray(f).copy())
 
-                if n == 'color' and im == 0: # we only want to augment this center image
+                if n == 'rgb' and im == 0: # we only want to augment this center image
                     inputs[(n + "_aug", im, i)] = self.to_tensor(self.color_aug(f).copy())
 
         # adjusting intrinsics to match each scale in the pyramid
@@ -295,9 +295,9 @@ class RealSenseDepth(data.Dataset):
         
         inputs[("disp", 0, -1)] = self.load_disp(self.data['depth0'][frame_idx][1])
 
-        inputs[("color", 0, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx][1]))
-        inputs[("color", -1, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx - 1][1]))
-        inputs[("color", 1, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx + 1][1]))
+        inputs[("rgb", 0, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx][1]))
+        inputs[("rgb", -1, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx - 1][1]))
+        inputs[("rgb", 1, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx + 1][1]))
 
         inputs[("ir0", 0, -1)] = self.load_im(self.data['ir0'][frame_idx][1])
         inputs[("ir0", -1, -1)] = self.load_im(self.data['ir0'][frame_idx-1][1])

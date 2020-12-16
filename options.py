@@ -74,7 +74,7 @@ class MonodepthOptions:
         self.parser.add_argument("--inputoutput_weight",
                                  type=float,
                                  help="input output loss weight",
-                                 default=0)
+                                 default=1)
         self.parser.add_argument("--scales",
                                  nargs="+",
                                  type=int,
