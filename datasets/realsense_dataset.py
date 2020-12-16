@@ -402,6 +402,7 @@ class RealSenseDepth(data.Dataset):
                 else:
                     data[sensor] = np.concatenate((data[sensor], seq_data[sensor]), axis=0)
                     
+                print(sensor, len(data[sensor]), max(index), len(index))
                 
         return data, index
 
