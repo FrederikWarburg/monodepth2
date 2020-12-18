@@ -14,6 +14,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+import torchvision.transforms.functional as TF
+
 
 import json
 import matplotlib.pyplot as plt
@@ -27,6 +29,7 @@ import networks
 from IPython import embed
 
 import time
+from PIL import Image
 
 
 class Trainer:
@@ -106,16 +109,16 @@ class Trainer:
 
         train_dataset = self.dataset(
             os.path.join(self.opt.data_path, 'train'), train_filenames, self.opt.height, self.opt.width,
-            self.opt.frame_ids, 4, self.opt.calib, self.opt.min_depth, self.opt.max_depth, is_train=True, img_ext=img_ext)
+            self.opt.frame_ids, 4, self.opt.calib, self.opt.min_depth, self.opt.max_depth, self.opt.data_aug, is_train=True, img_ext=img_ext)
         self.train_loader = DataLoader(
             train_dataset, self.opt.batch_size, True,
             num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
 
         val_dataset = self.dataset(
             os.path.join(self.opt.data_path, 'val'), val_filenames, self.opt.height, self.opt.width,
-            self.opt.frame_ids, 4, self.opt.calib, self.opt.min_depth, self.opt.max_depth, is_train=False, img_ext=img_ext)
+            self.opt.frame_ids, 4, self.opt.calib, self.opt.min_depth, self.opt.max_depth, False, is_train=False, img_ext=img_ext)
         self.val_loader = DataLoader(
-            val_dataset, self.opt.batch_size, True,
+            val_dataset, self.opt.batch_size, shuffle = False,
             num_workers=self.opt.num_workers, pin_memory=True, drop_last=True)
         self.val_iter = iter(self.val_loader)
 
@@ -177,16 +180,19 @@ class Trainer:
 
         print("Training")
         self.set_train()
-
+        timings = {"backprop":0,"loader":0,"forward_time":0,"generate_time":0,"loss_time":0}
+        before_data_time = time.time()
         for batch_idx, inputs in enumerate(self.train_loader):
-
+            timings["loader"] += time.time() - before_data_time
             before_op_time = time.time()
 
-            outputs, losses = self.process_batch(inputs)
+            outputs, losses, timings = self.process_batch(inputs, timings)
 
+            before_backprop_time = time.time()
             self.model_optimizer.zero_grad()
             losses["loss"].backward()
             self.model_optimizer.step()
+            timings['backprop'] += time.time() - before_backprop_time
 
             duration = time.time() - before_op_time
 
@@ -200,24 +206,69 @@ class Trainer:
                 if "depth_gt" in inputs:
                     self.compute_depth_losses(inputs, outputs, losses)
 
-                self.log("train", inputs, outputs, losses)
+                self.log("train", inputs, outputs, losses, timings)
                 self.val()
 
             self.step += 1
+            before_data_time = time.time()
 
         self.model_lr_scheduler.step()
 
-    def process_batch(self, inputs):
+    def process_batch(self, inputs, timings, mode = 'train'):
         """Pass a minibatch through the network and generate images and losses
         """
+
 
         for key, ipt in inputs.items():
             inputs[key] = ipt.to(self.device)
 
-        #if self.opt.input == "depth":
+        if self.opt.data_aug and mode == 'train':
+            disp_aug = inputs["disp_aug", 0, 0]
+            rgb_aug = inputs["rgb_aug", 0, 0]
+
+            b,c,h,w = disp_aug.shape
+
+            # rotate and flip
+            hflip = torch.tensor(np.random.binomial(1, 0.5, b)).to(self.device)
+            theta = torch.tensor(np.random.uniform(-5.0, 5.0, b) * np.pi / 180.0).to(self.device)
+
+            # Flipping
+            rgb_aug = hflip_img(rgb_aug, hflip, torch.float)
+            disp_aug = hflip_img(disp_aug, hflip, torch.float)
+
+            # Rotation
+            rgb_aug = rot_img(rgb_aug, theta, torch.float)
+            disp_aug = rot_img(disp_aug, theta, torch.float)
+        else:
+            disp_aug = inputs["disp", 0, 0]
+            rgb_aug = inputs["rgb", 0, 0]
+
+        before_forward_time = time.time()
+
         # Refine depth measurements
-        features = self.models["encoder"](inputs["disp", 0, 0], inputs["rgb_aug", 0, 0])
+        features = self.models["encoder"](disp_aug, rgb_aug)
         outputs = self.models["depth"](features)
+
+        if self.opt.data_aug and mode == 'train':
+            
+            for scale in self.opt.scales:
+                disp = outputs[("disp", scale)]
+
+                # Flipping
+                disp = hflip_img(disp, hflip, torch.float)
+
+                # rotation mask
+                mask = torch.ones_like(disp)
+                mask = rot_img(mask, -theta, torch.float)
+                
+                # Rotation
+                disp = rot_img(disp, -theta, torch.float)
+
+                outputs[("disp", scale)] = disp
+                outputs[("mask", scale)] = mask
+
+        timings["forward_time"] += time.time() - before_forward_time
+
         #else:
         # Otherwise, we only feed the image with frame_id 0 through the depth encoder
         #features = self.models["encoder"](inputs["color_aug", 0, 0])
@@ -226,15 +277,21 @@ class Trainer:
         if self.opt.predictive_mask:
             outputs["predictive_mask"] = self.models["predictive_mask"](features)
 
+        before_generate_im = time.time()
         self.generate_images_pred(inputs, outputs)
-        losses = self.compute_losses(inputs, outputs)
+        timings["generate_time"] += time.time() - before_generate_im
 
-        return outputs, losses
+        before_compute_loss = time.time()
+        losses = self.compute_losses(inputs, outputs)
+        timings["loss_time"] += time.time() - before_compute_loss
+
+        return outputs, losses, timings
 
     def val(self):
         """Validate the model on a single minibatch
         """
         self.set_eval()
+        timings = {"backprop":0,"loader":0,"forward_time":0,"generate_time":0,"loss_time":0}
         try:
             inputs = self.val_iter.next()
         except StopIteration:
@@ -242,12 +299,12 @@ class Trainer:
             inputs = self.val_iter.next()
 
         with torch.no_grad():
-            outputs, losses = self.process_batch(inputs)
+            outputs, losses, timings = self.process_batch(inputs, timings, mode='val')
 
             if "depth_gt" in inputs:
                 self.compute_depth_losses(inputs, outputs, losses)
 
-            self.log("val", inputs, outputs, losses)
+            self.log("val", inputs, outputs, losses, timings)
             del inputs, outputs, losses
 
         self.set_train()
@@ -258,6 +315,9 @@ class Trainer:
         """
         for scale in self.opt.scales:
             disp = outputs[("disp", scale)]
+
+            if ('mask', scale) in outputs:
+                mask = outputs[('mask', scale)]
 
             if self.opt.v1_multiscale: # use monodepthv1 multidepth
                 source_scale = scale
@@ -540,12 +600,18 @@ class Trainer:
         print(print_string.format(self.epoch, batch_idx, samples_per_sec, loss,
                                   sec_to_hm_str(time_sofar), sec_to_hm_str(training_time_left),self.step))
 
-    def log(self, mode, inputs, outputs, losses):
+
+
+    def log(self, mode, inputs, outputs, losses, timings = None):
         """Write an event to the tensorboard events file
         """
         writer = self.writers[mode]
         for l, v in losses.items():
             writer.add_scalar("{}".format(l), v, self.step)
+
+        if timings is not None:
+            for l, v in timings.items():
+                writer.add_scalar("time/{}".format(l), v, self.step)
 
         for j in range(min(4, self.opt.batch_size)):  # write a maxmimum of four images
             

@@ -11,6 +11,12 @@ import zipfile
 from six.moves import urllib
 import torch
 
+import torch
+import torch.nn.functional as F
+import numpy as np
+import matplotlib.pyplot as plt
+
+
 def readlines(filename):
     """Read all the lines in a text file and return as a list
     """
@@ -115,3 +121,42 @@ def download_model_if_doesnt_exist(model_name):
             f.extractall(model_path)
 
         print("   Model unzipped to {}".format(model_path))
+
+
+
+
+def get_flip_mat(hflip):
+    
+    no_flip = torch.tensor([[1,0,0],[0,1,0]])[None, ...].type(torch.float).repeat(len(hflip),1,1)
+    flip = torch.tensor([[-1, 0, 0], [0, 1, 0]])[None, ...].type(torch.float).repeat(sum(hflip),1,1)
+    
+    idx = torch.where(hflip == 1)[0]
+    no_flip[idx] = flip
+    
+    return no_flip.to(hflip.device)
+
+
+def hflip_img(x, hflip, dtype):
+    b,c,h,w = x.shape
+    flip_mat = get_flip_mat(hflip)
+    grid = F.affine_grid(flip_mat, x.size()).type(dtype)
+    x = F.grid_sample(x, grid, align_corners=False)
+    return x
+
+
+def get_rot_mat(theta):
+    
+    rot = torch.zeros(len(theta), 2, 3)
+    rot[:,0,0] = torch.cos(theta)
+    rot[:,0,1] = -torch.sin(theta)
+    rot[:,1,0] = torch.sin(theta)
+    rot[:,1,1] = torch.cos(theta)
+    
+    return rot.to(theta.device)
+
+
+def rot_img(x, theta, dtype):
+    rot_mat = get_rot_mat(theta)
+    grid = F.affine_grid(rot_mat, x.size()).type(dtype)
+    x = F.grid_sample(x, grid, align_corners=False)
+    return x

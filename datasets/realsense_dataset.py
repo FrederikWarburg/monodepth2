@@ -91,6 +91,7 @@ class RealSenseDepth(data.Dataset):
                  calibration_file,
                  min_depth, 
                  max_depth,
+                 data_aug,
                  is_train=False,
                  img_ext='.jpg'):
         super(RealSenseDepth, self).__init__()
@@ -163,6 +164,9 @@ class RealSenseDepth(data.Dataset):
         self.color_aug = transforms.ColorJitter.get_params(
                 self.brightness, self.contrast, self.saturation, self.hue)
 
+        self.random_erase = transforms.RandomErasing()
+        self.data_aug = data_aug
+
         self.device = torch.device("cpu" if False else "cuda")
         self.backproject_depth = BackprojectDepth(1, height, width)
        # self.backproject_depth.to(self.device)
@@ -196,18 +200,15 @@ class RealSenseDepth(data.Dataset):
             f = inputs[k]
             if "K_" not in k or 'T_' not in k:
                 n, im, i = k
-                
-                #if 'depth' in k:
-                    #f = np.array(f)
-                    #f = f.astype(np.float32) / (1000.0) #
-
-                #    inputs[(n, im, i)] = torch.from_numpy(f).unsqueeze(0)
-                #else:
-                
+                                
                 inputs[(n, im, i)] = self.to_tensor(np.asarray(f).copy())
+                
+                if self.data_aug:
+                    if n == 'rgb' and im == 0: # we only want to augment this center image
+                        inputs[(n + "_aug", im, i)] = self.to_tensor(self.color_aug(f).copy())
 
-                if n == 'rgb' and im == 0: # we only want to augment this center image
-                    inputs[(n + "_aug", im, i)] = self.to_tensor(self.color_aug(f).copy())
+                    if n == 'disp' and im == 0: # we only want to augment this center image
+                        inputs[(n + "_aug", im, i)] = self.random_erase(self.to_tensor(np.asarray(f).copy()))
 
         # adjusting intrinsics to match each scale in the pyramid
         for scale in range(self.num_scales):
@@ -380,7 +381,6 @@ class RealSenseDepth(data.Dataset):
             idx = np.asarray([i for i in idx if i not in [0, len(idx) - 1]])
         else:
             idx = np.arange(len(data["ir0"]))
-            #TODO: filter such that we only use the images with the sensor on.
 
         return data, idx
 
