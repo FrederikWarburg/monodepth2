@@ -431,7 +431,7 @@ class Trainer:
             pred = outputs[("ir0", 1, scale)]
             reprojection_loss = self.compute_reprojection_loss(pred, target)
             reprojection_losses.append(reprojection_loss)
-            outputs[("reproject_tmp_ir0_ir1",1,scale)] = reprojection_loss.clone()
+            outputs[("reproject_tmp_ir1_ir0",1,scale)] = reprojection_loss.clone()
 
             # t = -1 --> t = 1 : temporal
             target = outputs[("ir0", -1, source_scale)]
@@ -445,7 +445,7 @@ class Trainer:
             pred = outputs[("ir1", 1, scale)]
             reprojection_loss = self.compute_reprojection_loss(pred, target)
             reprojection_losses.append(reprojection_loss)
-            outputs[("reproject_tmp_ir0_ir0",0,scale)] = reprojection_loss.clone()
+            outputs[("reproject_tmp_ir1_ir1",0,scale)] = reprojection_loss.clone()
 
             # t = 0 --> t = -1 : temporal (rgb)
             target = outputs[("rgb", 0, source_scale)]
@@ -463,65 +463,13 @@ class Trainer:
 
             reprojection_losses = torch.cat(reprojection_losses, 1)
 
-            """
-            if not self.opt.disable_automasking:
-                identity_reprojection_losses = []
-                for frame_id in self.opt.frame_ids[1:]:
-                    pred = inputs[("color", frame_id, source_scale)]
-                    identity_reprojection_losses.append(
-                        self.compute_reprojection_loss(pred, target))
-
-                identity_reprojection_losses = torch.cat(identity_reprojection_losses, 1)
-
-                if self.opt.avg_reprojection:
-                    identity_reprojection_loss = identity_reprojection_losses.mean(1, keepdim=True)
-                else:
-                    # save both images, and do min all at once below
-                    identity_reprojection_loss = identity_reprojection_losses
-            
-
-            elif self.opt.predictive_mask:
-                # use the predicted mask
-                mask = outputs["predictive_mask"]["disp", scale]
-                if not self.opt.v1_multiscale:
-                    mask = F.interpolate(
-                        mask, [self.opt.height, self.opt.width],
-                        mode="bilinear", align_corners=False)
-
-                reprojection_losses *= mask
-
-                # add a loss pushing mask to 1 (using nn.BCELoss for stability)
-                weighting_loss = 0.2 * nn.BCELoss()(mask, torch.ones(mask.shape).cuda())
-                loss += weighting_loss.mean()
-            """
-
             if self.opt.avg_reprojection:
                 reprojection_loss = reprojection_losses.mean(1, keepdim=True)
             else:
-                reprojection_loss = reprojection_losses
+                # they argue that relying on the min reduces artifacts at occlusions
+                reprojection_loss, _ = torch.min(reprojection_loss, dim=1)
 
-            if not self.opt.disable_automasking:
-                # add random numbers to break ties
-                pass
-                #identity_reprojection_loss += torch.randn(
-                #    identity_reprojection_loss.shape).cuda() * 0.00001
-
-                #combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
-                #TODO: figure out how the auto mask works
-                combined = reprojection_loss
-            else:
-                combined = reprojection_loss
-
-            if combined.shape[1] == 1:
-                to_optimise = combined
-            else:
-                to_optimise, idxs = torch.min(combined, dim=1)
-
-            #if not self.opt.disable_automasking:
-            #    outputs["identity_selection/{}".format(scale)] = (
-            #        idxs > identity_reprojection_loss.shape[1] - 1).float()
-
-            reproject_loss = to_optimise.mean()
+            reproject_loss = reprojection_loss.mean()
 
             # smoothness loss
             mean_disp = disp.mean(2, True).mean(3, True)
@@ -535,22 +483,28 @@ class Trainer:
             outputs[('inputoutput_loss',0, scale)] = inputoutput_loss.clone()
             inputoutput_loss = self.opt.inputoutput_weight * inputoutput_loss.mean() / (2 ** scale)
             
-            """
-            import matplotlib.pyplot as plt
-            plt.subplot(1,2,1)
-            plt.imshow(outputs[('inputoutput_loss',0, scale)][0,0].cpu().detach().numpy())
-            plt.subplot(1,2,2)
-            plt.imshow(inputs[('disp',0, scale)][0,0].cpu().detach().numpy())
-            plt.show()
-            """
-
             # accumulate losses
             loss = reproject_loss + smooth_loss + inputoutput_loss 
             total_loss += loss
+
+            # only for logging purposes
             losses["loss/{}".format(scale)] = loss
             losses["reproject_loss/{}".format(scale)] = reproject_loss
             losses["smooth_loss/{}".format(scale)] = smooth_loss
             losses["inputoutput_loss/{}".format(scale)] = inputoutput_loss
+
+            losses["reproject_prev_rgb/{}".format(scale)] = torch.mean(outputs[("reproject_tmp_rgb",-1,scale)])
+            losses["reproject_next_rgb/{}".format(scale)] = torch.mean(outputs[("reproject_tmp_rgb",1,scale)])
+
+            losses["reproject_tmp_ir0_ir0/{}".format(scale)] = torch.mean(outputs[("reproject_tmp_ir0_ir0",0,scale)])
+            losses["reproject_tmp_ir1_ir1/{}".format(scale)] = torch.mean(outputs[("reproject_tmp_ir1_ir1",0,scale)])
+
+            losses["reproject_tmp_ir1_ir0/{}".format(scale)] = torch.mean(outputs[("reproject_tmp_ir1_ir0",1,scale)])
+            losses["reproject_tmp_ir0_ir1/{}".format(scale)] = torch.mean(outputs[("reproject_tmp_ir0_ir1",1,scale)])
+            
+            losses["reproject_next_ir0_ir1/{}".format(scale)] = torch.mean(outputs[("reproject_ir0_ir1",1,scale)])
+            losses["reproject_curr_ir0_ir1/{}".format(scale)] = torch.mean(outputs[("reproject_ir0_ir1",0,scale)])
+            losses["reproject_prev_ir0_ir1/{}".format(scale)] = torch.mean(outputs[("reproject_ir0_ir1",-1,scale)])
 
         total_loss /= self.num_scales
         losses["loss"] = total_loss
@@ -636,7 +590,7 @@ class Trainer:
             #plt.imshow(input_depth[0].cpu().numpy(), vmin=self.opt.min_depth,vmax=self.opt.max_depth);  plt.title("depth"); plt.subplot(1,3,3)
             #plt.imshow(normalize_image(input_depth, self.opt.max_depth, self.opt.min_depth)[0].cpu().numpy()); plt.title("norm depth"); plt.show()
 
-            for s in self.opt.scales:
+            for s in [0]:#self.opt.scales:
 
                 ###
                 # Inputs and predictions
@@ -649,11 +603,29 @@ class Trainer:
                 writer.add_image(
                     "input_ir1_curr_{}_{}/{}".format(0, s, j),
                     inputs[("ir1", 0, s)][j].data, self.step)
+                writer.add_image(
+                    "input_ir0_prev_{}_{}/{}".format(0, s, j),
+                    inputs[("ir0", -1, s)][j].data, self.step)
+                writer.add_image(
+                    "input_ir1_prev_{}_{}/{}".format(0, s, j),
+                    inputs[("ir1", -1, s)][j].data, self.step)
+                writer.add_image(
+                    "input_ir0_next_{}_{}/{}".format(0, s, j),
+                    inputs[("ir0", 1, s)][j].data, self.step)
+                writer.add_image(
+                    "input_ir1_next_{}_{}/{}".format(0, s, j),
+                    inputs[("ir1", 1, s)][j].data, self.step)
 
                 # add color image
                 writer.add_image(
-                    "color_{}_{}/{}".format(0, s, j),
+                    "input_color_curr_{}_{}/{}".format(0, s, j),
                     inputs[("rgb", 0, s)][j].data, self.step)
+                writer.add_image(
+                    "input_color_prev_{}_{}/{}".format(0, s, j),
+                    inputs[("rgb", -1, s)][j].data, self.step)
+                writer.add_image(
+                    "input_color_next_{}_{}/{}".format(0, s, j),
+                    inputs[("rgb", 1, s)][j].data, self.step)
 
                 # add prediction
                 writer.add_image(
