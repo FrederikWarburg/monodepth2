@@ -269,11 +269,6 @@ class Trainer:
 
         timings["forward_time"] += time.time() - before_forward_time
 
-        #else:
-        # Otherwise, we only feed the image with frame_id 0 through the depth encoder
-        #features = self.models["encoder"](inputs["color_aug", 0, 0])
-        #outputs = self.models["depth"](features)
-
         if self.opt.predictive_mask:
             outputs["predictive_mask"] = self.models["predictive_mask"](features)
 
@@ -348,10 +343,10 @@ class Trainer:
             outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "rgb", t = 0)
             outputs = self.project_and_sample(inputs, cam_points, outputs, source_scale, scale, "rgb", t = -1)
 
-    def project_and_sample(self, inputs, cam_points, outputs, source_scale, scale, sensor, t):
+    def project_and_sample(self, inputs, cam_points, outputs, source_scale, scale, cam, t):
 
-        K = inputs[("K_{}".format(sensor), source_scale)]
-        T_cam = inputs[("T_{}".format(sensor), t)]
+        K = inputs[("K_{}".format(cam), source_scale)]
+        T_cam = inputs[("T_{}".format(cam), t)]
 
         # T_RGB_C = inv(T_WB @ T_BS @ T_SRGB) @ (T_WB @ T_BS @ T_SC)
         # From RGB to cam
@@ -360,12 +355,12 @@ class Trainer:
         pix_coords = self.project_3d[source_scale](cam_points, K, T)
 
         # store intermediate value
-        outputs[("sample_{}".format(sensor), t, scale)] = pix_coords
+        outputs[("sample_{}".format(cam), t, scale)] = pix_coords
 
         # get intensenties
-        outputs[("{}".format(sensor), t, scale)] = F.grid_sample(
-            inputs[("{}".format(sensor), t, source_scale)],
-            outputs[("sample_{}".format(sensor), t, scale)],
+        outputs[("{}".format(cam), t, scale)] = F.grid_sample(
+            inputs[("{}".format(cam), t, source_scale)],
+            outputs[("sample_{}".format(cam), t, scale)],
             padding_mode="border", align_corners=False)
         
         return outputs

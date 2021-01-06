@@ -578,16 +578,15 @@ class RealSenseDepth(data.Dataset):
     def dep_to_disp(self, dep):
 
         mask = (dep > self.min_depth) * (dep < self.max_depth)
-        #dep = np.clip(dep, a_min= self.min_depth,  a_max = self.max_depth) # avoid division with zero
-        scaled_disp = np.zeros_like(dep)
-        scaled_disp[mask] = (1 - dep[mask]*self.min_depth)/ (dep[mask]*self.max_depth)
 
-        """
-        import matplotlib.pyplot as plt
-        plt.imshow(scaled_disp)
-        plt.title("aligned_disp")
-        plt.show()
-        """
+        disp = np.zeros_like(dep)
+        disp[mask] = 1.0 / dep[mask]
+
+        min_disp = 1.0 / self.max_depth
+        max_disp = 1.0 / self.min_depth
+
+        scaled_disp = (disp - min_disp) / (max_disp - min_disp)
+        scaled_disp[mask==0] = 0
 
         scaled_disp_im = Image.fromarray(scaled_disp)
 
