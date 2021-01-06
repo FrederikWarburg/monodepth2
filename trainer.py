@@ -351,8 +351,11 @@ class Trainer:
     def project_and_sample(self, inputs, cam_points, outputs, source_scale, scale, sensor, t):
 
         K = inputs[("K_{}".format(sensor), source_scale)]
-        T_sensor = inputs[("T_{}".format(sensor), t)]
-        T = torch.matmul(torch.inverse(T_sensor), inputs[("T_rgb",0)])
+        T_cam = inputs[("T_{}".format(sensor), t)]
+
+        # T_RGB_C = inv(T_WB @ T_BS @ T_SRGB) @ (T_WB @ T_BS @ T_SC)
+        # From RGB to cam
+        T = torch.matmul(torch.inverse(inputs[("T_rgb",0)]), T_cam)
 
         pix_coords = self.project_3d[source_scale](cam_points, K, T)
 
