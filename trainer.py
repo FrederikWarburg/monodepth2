@@ -350,7 +350,7 @@ class Trainer:
 
         # T_RGB_C = inv(T_WB @ T_BS @ T_SRGB) @ (T_WB @ T_BS @ T_SC)
         # From RGB to cam
-        T = torch.matmul(torch.inverse(inputs[("T_rgb",0)]), T_cam)
+        T = torch.matmul(torch.inverse(T_cam), inputs[("T_rgb",0)])
 
         pix_coords = self.project_3d[source_scale](cam_points, K, T)
 
