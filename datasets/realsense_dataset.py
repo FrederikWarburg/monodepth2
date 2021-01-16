@@ -403,7 +403,7 @@ class RealSenseDepth(data.Dataset):
                                     
         return data, index
 
-    def interpolate(self, T_WB, ir0, offset):
+    def interpolate(self, T_WB, t_ir0, offset):
 
         t = T_WB[:,0].astype(float) - offset
         t_ir0 = t_ir0.astype(float)
