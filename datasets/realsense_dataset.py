@@ -294,23 +294,23 @@ class RealSenseDepth(data.Dataset):
         inputs = {}
 
         
-        inputs[("disp", 0, -1)] = self.load_disp(self.data['depth0'][frame_idx][1])
+        inputs[("disp", 0, -1)] = self.load_disp(self.data[frame_idx, 3])
 
-        inputs[("rgb", 0, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx][1]))
-        inputs[("rgb", -1, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx - 1][1]))
-        inputs[("rgb", 1, -1)] = self.undistort_rgb(self.load_im(self.data['cam0'][frame_idx + 1][1]))
+        inputs[("rgb", 0, -1)] = self.undistort_rgb(self.load_im(self.data[frame_idx, 1]))
+        inputs[("rgb", -1, -1)] = self.undistort_rgb(self.load_im(self.data[frame_idx - 1, 1]))
+        inputs[("rgb", 1, -1)] = self.undistort_rgb(self.load_im(self.data[frame_idx + 1, 1]))
 
-        inputs[("ir0", 0, -1)] = self.load_im(self.data['ir0'][frame_idx][1])
-        inputs[("ir0", -1, -1)] = self.load_im(self.data['ir0'][frame_idx-1][1])
-        inputs[("ir0", 1, -1)] = self.load_im(self.data['ir0'][frame_idx+1][1])
+        inputs[("ir0", 0, -1)] = self.load_im(self.data[frame_idx, 4])
+        inputs[("ir0", -1, -1)] = self.load_im(self.data[frame_idx - 1, 4])
+        inputs[("ir0", 1, -1)] = self.load_im(self.data[frame_idx + 1, 4])
 
-        inputs[("ir1", 0, -1)] = self.load_im(self.data['ir1'][frame_idx][1])
-        inputs[("ir1", -1, -1)] = self.load_im(self.data['ir1'][frame_idx-1][1])
-        inputs[("ir1", 1, -1)] = self.load_im(self.data['ir1'][frame_idx+1][1])
+        inputs[("ir1", 0, -1)] = self.load_im(self.data[frame_idx, 5])
+        inputs[("ir1", -1, -1)] = self.load_im(self.data[frame_idx - 1, 5])
+        inputs[("ir1", 1, -1)] = self.load_im(self.data[frame_idx + 1, 5])
         
-        T_WB_prev = self.data['T_WB'][frame_idx-1]
-        T_WB_curr = self.data['T_WB'][frame_idx]
-        T_WB_next = self.data['T_WB'][frame_idx+1]
+        T_WB_prev = self.data[frame_idx - 1, -16:].reshape(4,4)
+        T_WB_curr = self.data[frame_idx, -16:].reshape(4,4)
+        T_WB_next = self.data[frame_idx + 1, -16:].reshape(4,4)
         T_BS = np.diag(np.ones(4))
 
         inputs= self.preprocess(inputs)
@@ -370,53 +370,45 @@ class RealSenseDepth(data.Dataset):
             data[sensor] = data[sensor][:min(_lengths)]
             data[sensor][:,1] = [os.path.join(datapath, sensor, 'data', fn) for fn in data[sensor][:,1]]
 
+
+        # put everything into the same dataframe for ease
+        # rgb time, rgb path, ir time, depth path, ir0 path, ir1 path, projector on
+        dataframe = np.concatenate([data['cam0'][:, :2], data['depth0'][:, :2], data['ir0'][:, 1:2], data['ir1'][:, 1:2], data['ir1'][:, -1:]], axis=1)
+
         # load postion information
-        data['T_WB'] = pd.read_csv(os.path.join(datapath, 'position', 'optimised_trajectory_0.csv')).values       
+        T_WB = pd.read_csv(os.path.join(datapath, 'position', 'optimised_trajectory_0.csv')).values
 
-        #only with laser
-        if True:
-            idx = np.where(data["ir0"][:,-1] == 150)[0]
+        T_WB_interpolated, valid_idx = interpolate(T_WB, data1[:,2], self.offset)
 
-            # remove first and last index in sequence
-            idx = np.asarray([i for i in idx if i not in [0, len(idx) - 1]])
-        else:
-            idx = np.arange(len(data["ir0"]))
+        dataframe = np.concatenate([dataframe[valid_idx, :], T_WB_interpolated], axis=1) 
 
-        return data, idx
+        # only with laser images
+        idx = np.where(dataframe[:,-17] == 150)[0]
+
+        # Find indices that have both image in front and after
+        idx = idx[(idx > 0) * (idx < len(dataframe))]
+
+        return dataframe, idx
 
     def load_data(self, datapath):
         
         index = []
-        data = {}
+        data = []
         for seq in os.listdir(datapath):
 
             seq_data, idx = self.load_seq(os.path.join(datapath, seq))
-            
-            seq_data['T_WB'], idx_iter = self.interpolate(seq_data['T_WB'], seq_data['ir0'], self.offset)
-            
-            # dont use first and last as we need them for prev and next frame
-            idx = np.asarray([i for i in idx if i in idx_iter[1:-1]])
-
-            if "ir0" in data:
-                index.extend(idx + len(data["ir0"]))
-            else:
-                index.extend(idx)
-
-            for sensor in ['cam0', 'depth0', 'ir0', 'ir1', 'T_WB']:
-
-                if sensor not in data:
-                    data[sensor] = seq_data[sensor]
-                else:
-                    data[sensor] = np.concatenate((data[sensor], seq_data[sensor]), axis=0)
+                        
+            index.extend(idx + len(data))
+            data = seq_data if len(data) == 0 else np.concatenate([data, seq_data], axis = 0) 
                                     
         return data, index
 
     def interpolate(self, T_WB, ir0, offset):
 
         t = T_WB[:,0].astype(float) - offset
-        t_ir0 = ir0[:,0].astype(float)
+        t_ir0 = t_ir0.astype(float)
 
-        # times
+        # times (find idx where we have between slam postion estimates)
         idx = np.where((t_ir0 > min(t)) * (t_ir0 < max(t)))[0]
         t_ir0_with_pos = t_ir0[idx]
 
@@ -443,16 +435,17 @@ class RealSenseDepth(data.Dataset):
 
         # initialize T
         T = np.diag(np.ones(4))
-        T = np.repeat(T[None,:,:],len(t_ir0), axis=0)
+        T = np.repeat(T[None,:,:],len(t_ir0_with_pos), axis=0)
 
         # insert into T (here we have some padding to get the same length of the images)
         # This makes indexing in getitem significantly easier
-        T[min(idx):(max(idx)+1),:3,:3] = q_new.as_matrix()
-        T[min(idx):(max(idx)+1),0,3] = new_x
-        T[min(idx):(max(idx)+1),1,3] = new_y
-        T[min(idx):(max(idx)+1),2,3] = new_z
+        T[:,:3,:3] = q_new.as_matrix()
+        T[:,0,3] = new_x
+        T[:,1,3] = new_y
+        T[:,2,3] = new_z
 
-        return T, idx
+        # reshape T to fit into dataframe
+        return T.reshape(-1, 16), idx
 
     def undistort_rgb(self, im):
         
