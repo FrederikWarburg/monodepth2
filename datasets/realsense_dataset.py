@@ -378,7 +378,7 @@ class RealSenseDepth(data.Dataset):
         # load postion information
         T_WB = pd.read_csv(os.path.join(datapath, 'position', 'optimised_trajectory_0.csv')).values
 
-        T_WB_interpolated, valid_idx = interpolate(T_WB, data1[:,2], self.offset)
+        T_WB_interpolated, valid_idx = self.interpolate(T_WB, dataframe[:,2], self.offset)
 
         dataframe = np.concatenate([dataframe[valid_idx, :], T_WB_interpolated], axis=1) 
 
