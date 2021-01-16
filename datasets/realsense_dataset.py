@@ -293,6 +293,16 @@ class RealSenseDepth(data.Dataset):
 
         inputs = {}
 
+        # make sure that projector is only on in the current frame
+        proj_intensity_t0 = self.data[frame_idx, -17]
+        proj_intensity_tm1 = self.data[frame_idx - 1, -17]
+        proj_intensity_tp1 = self.data[frame_idx + 1, -17]
+
+        if proj_intensity_t0 != 150 and proj_intensity_tm1 != 0 and proj_intensity_tp1 != 0:
+            print("error!")
+            print(frame_idx)
+            print()
+            print(self.data[frame_idx, :])
         
         inputs[("disp", 0, -1)] = self.load_disp(self.data[frame_idx, 3])
 
