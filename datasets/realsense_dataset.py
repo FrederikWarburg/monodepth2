@@ -298,11 +298,12 @@ class RealSenseDepth(data.Dataset):
         proj_intensity_tm1 = self.data[frame_idx - 1, -17]
         proj_intensity_tp1 = self.data[frame_idx + 1, -17]
 
-        if proj_intensity_t0 != 150 and proj_intensity_tm1 != 0 and proj_intensity_tp1 != 0:
+        if proj_intensity_t0 != 150 or proj_intensity_tm1 != 0 or proj_intensity_tp1 != 0:
             print("error!")
-            print(frame_idx)
+            print("fame idx", frame_idx)
             print()
             print(self.data[frame_idx, :])
+            print(proj_intensity_t0, proj_intensity_tm1, proj_intensity_tp1)
         
         inputs[("disp", 0, -1)] = self.load_disp(self.data[frame_idx, 3])
 
